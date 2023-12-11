@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
-
+dotenv.config();
 const secretKey = process.env.SECRET_KEY;
 
 function authToken(req, res, next) {
@@ -9,8 +9,15 @@ function authToken(req, res, next) {
     if (!token) {
         return res.redirect('/login');
     }
-    next();
+
+    try {
+        jwt.verify(token, secretKey);
+        next();
+    } catch (error) {
+        return res.redirect('/login');
+    }
 }
+
 module.exports = {
     authToken
 };

@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook').Strategy;
 
 dotenv.config();
 
@@ -32,6 +33,19 @@ passport.use(new GoogleStrategy({
     done(null, email);
 }));
 
+passport.use(
+    new FacebookStrategy(
+        {
+            clientID: '1099187007928932',
+            clientSecret: '58104d4fe1dc529b7adf801f2443cea5',
+            callbackURL: 'http://localhost:8080/auth/facebook/callback',
+            profileFields: ['id', 'displayName', 'email'],
+        },
+        (accessToken, refreshToken, profile, done) => {
+            done(null, profile);
+        }
+    )
+);
 
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.urlencoded({ extended: true }));
@@ -40,18 +54,6 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
-
-app.get('/auth/google/callback', (req, res, next) => {
-    passport.authenticate('google', (err, profile, email) => {
-        req.user = profile
-        next()
-    })(req, res, next)
-}, (req, res) => {
-    const token = req.user.id_token
-    res.cookie('token', token, { maxAge: 3600000 });
-    res.redirect("/store")
-})
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'templates', 'main.html'));
@@ -68,9 +70,41 @@ app.get('/login', (req, res) => {
 app.get('/store', authToken, (req, res) => {
     res.sendFile(path.join(__dirname, '../public', 'templates', 'store.html'));
 });
-app.get('/store_gg', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public', 'templates', 'store.html'));
+
+app.get('/logout', (req, res) => {
+    res.clearCookie('token');
+    res.redirect('/login');
 });
+
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
+
+app.get('/auth/google/callback', (req, res, next) => {
+    passport.authenticate('google', (err, profile) => {
+        req.user = profile
+        next()
+    })(req, res, next)
+}, (req, res) => {
+    const id = req.user.id_token;
+    const decodedToken = jwt.decode(id);
+    const token = jwt.sign({ email: decodedToken.email }, secretKey);
+    res.cookie('token', token, { maxAge: 3600000 });
+    res.redirect('/store')
+})
+
+app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+
+app.get('/auth/facebook/callback', (req, res, next) => {
+    passport.authenticate('facebook', (err, profile) => {
+        req.user = profile
+        next()
+    })(req, res, next)
+}, (req, res) => {
+    const email = req.user.emails[0].value;
+    const token = jwt.sign({ email: email }, secretKey);
+    res.cookie('token', token, { maxAge: 3600000 });
+    res.redirect('/store')
+})
+
 app.post('/register', (req, res) => {
     if (req.body.password != req.body.confirm_password) {
         console.log("pass not match");
